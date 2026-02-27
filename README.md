@@ -38,7 +38,7 @@ git push -u origin main
 
 ## Connecting a real database (example with Supabase)
 
-Right now, saving is **local only** (IndexedDB + per‑browser accounts).  
+Right now, saving can be **cloud-backed** using Supabase so it works across devices.  
 To modernize this into a cloud‑backed app with real accounts and shared galleries, you can connect it to a database such as **Supabase** (PostgreSQL + Auth + Storage).
 
 ### 1. Create a Supabase project
@@ -48,6 +48,10 @@ To modernize this into a cloud‑backed app with real accounts and shared galler
 3. Note your:
    - **Project URL**
    - **Anon public key** (safe to use in the browser)
+
+For your project, the URL looks like:
+
+- `https://iuiioazmtynjouynpias.supabase.co`
 
 ### 2. Create a table for media metadata
 

@@ -109,6 +109,17 @@ app.get("/api/check", (req, res) => {
   res.json({ id: user.id, email: user.email });
 });
 
+// Serve the static front-end files (index.html, script.js, styles.css)
+app.use(express.static(path.join(__dirname)));
+
+// For any non-API route, return the main page
+app.get("*", (req, res) => {
+  if (req.path.startsWith("/api/")) {
+    return res.status(404).json({ error: "Not found" });
+  }
+  res.sendFile(path.join(__dirname, "index.html"));
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });

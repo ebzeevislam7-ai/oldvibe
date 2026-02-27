@@ -15,161 +15,81 @@ const btnSignup = document.getElementById("btn-signup");
 const btnSignin = document.getElementById("btn-signin");
 const btnSignout = document.getElementById("btn-signout");
 
-// Local account state (per-browser only)
-let accounts = {};
-let currentUserId = null;
+// -------- Supabase (works across devices) --------
+// Your project ref was visible in your anon key: iuiioazmtynjouynpias
+const SUPABASE_URL = "https://iuiioazmtynjouynpias.supabase.co";
+const SUPABASE_ANON_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml1aWlvYXptdHluam91eW5waWFzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxMjYyNDcsImV4cCI6MjA4NzcwMjI0N30.0n_d55gP0P4j7hCtUSHcqR7VurH0ByoCgtpEWnnJnHk";
 
-// Simple IndexedDB setup so your pages (photos/videos) are remembered
-const DB_NAME = "medievalGallery";
-const DB_VERSION = 1;
-const STORE_NAME = "items";
+const MEDIA_BUCKET = "media";
+const SIGNED_URL_SECONDS = 60 * 60; // 1 hour
+
+const supabase =
+  window.supabase?.createClient?.(SUPABASE_URL, SUPABASE_ANON_KEY) ?? null;
 
 let items = [];
-let dbPromise = null;
+let currentUser = null;
 
-function openDb() {
-  if (dbPromise) return dbPromise;
-
-  dbPromise = new Promise((resolve, reject) => {
-    if (!("indexedDB" in window)) {
-      console.warn("IndexedDB not supported; gallery will not persist.");
-      resolve(null);
-      return;
-    }
-
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: "id", autoIncrement: true });
-      }
-    };
-
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => {
-      console.error("Failed to open IndexedDB", request.error);
-      resolve(null);
-    };
-  });
-
-  return dbPromise;
+function setUploadEnabled(enabled) {
+  fileInput.disabled = !enabled;
+  clearGalleryBtn.disabled = !enabled;
 }
 
-function saveItemToDb(file, type) {
-  return openDb().then((db) => {
-    if (!db) {
-      const url = URL.createObjectURL(file);
-      return {
-        id: Math.random().toString(36).slice(2),
-        url,
-        type,
-        name: file.name,
-        size: file.size,
-      };
-    }
-
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE_NAME, "readwrite");
-      const store = tx.objectStore(STORE_NAME);
-      const record = {
-        type,
-        name: file.name,
-        size: file.size,
-        createdAt: Date.now(),
-        blob: file,
-        userId: currentUserId || "guest",
-      };
-
-      const req = store.add(record);
-      req.onsuccess = () => {
-        const id = req.result;
-        const url = URL.createObjectURL(file);
-        resolve({
-          id,
-          url,
-          type,
-          name: file.name,
-          size: file.size,
-        });
-      };
-      req.onerror = () => reject(req.error || new Error("Failed to save item"));
-    });
-  });
+function sanitizeFilename(name) {
+  return String(name || "file")
+    .replace(/[^\w.\- ]+/g, "")
+    .replace(/\s+/g, "-")
+    .slice(0, 120);
 }
 
-function loadItemsFromDb() {
-  return openDb().then((db) => {
-    if (!db) {
-      updateEmptyState();
-      return;
-    }
-
-    return new Promise((resolve) => {
-      const tx = db.transaction(STORE_NAME, "readonly");
-      const store = tx.objectStore(STORE_NAME);
-      const req = store.getAll();
-
-      req.onsuccess = () => {
-        const activeUserId = currentUserId || "guest";
-        const records = (req.result || []).filter((record) => {
-          const recordUser = record.userId || "guest";
-          return recordUser === activeUserId;
-        });
-
-        const loadedItems = records.map((record) => {
-          const url = URL.createObjectURL(record.blob);
-          return {
-            id: record.id,
-            url,
-            type: record.type,
-            name: record.name,
-            size: record.size,
-          };
-        });
-        items = loadedItems;
-        renderGallery();
-        updateEmptyState();
-        resolve();
-      };
-
-      req.onerror = () => {
-        console.error("Failed to load items from IndexedDB", req.error);
-        updateEmptyState();
-        resolve();
-      };
-    });
-  });
+async function refreshSignedUrlForItem(item) {
+  if (!supabase || !item?.path) return item;
+  const { data, error } = await supabase.storage
+    .from(MEDIA_BUCKET)
+    .createSignedUrl(item.path, SIGNED_URL_SECONDS);
+  if (!error && data?.signedUrl) {
+    item.url = data.signedUrl;
+  }
+  return item;
 }
 
-function deleteItemFromDb(id) {
-  return openDb().then((db) => {
-    if (!db) return;
-    const tx = db.transaction(STORE_NAME, "readwrite");
-    const store = tx.objectStore(STORE_NAME);
-    store.delete(id);
-  });
-}
+async function loadItemsFromSupabase() {
+  if (!supabase || !currentUser) {
+    items = [];
+    renderGallery();
+    updateEmptyState();
+    return;
+  }
 
-function clearDbForCurrentUser() {
-  return openDb().then((db) => {
-    if (!db) return;
-    const tx = db.transaction(STORE_NAME, "readwrite");
-    const store = tx.objectStore(STORE_NAME);
-    const activeUserId = currentUserId || "guest";
+  const { data: rows, error } = await supabase
+    .from("media_items")
+    .select("id, path, type, name, size, created_at")
+    .eq("user_id", currentUser.id)
+    .order("created_at", { ascending: false });
 
-    const req = store.openCursor();
-    req.onsuccess = (event) => {
-      const cursor = event.target.result;
-      if (cursor) {
-        const recordUser = cursor.value.userId || "guest";
-        if (recordUser === activeUserId) {
-          cursor.delete();
-        }
-        cursor.continue();
-      }
-    };
-  });
+  if (error) {
+    console.error("Failed to load media_items", error);
+    items = [];
+    renderGallery();
+    updateEmptyState();
+    return;
+  }
+
+  const baseItems = (rows || []).map((row) => ({
+    id: row.id,
+    path: row.path,
+    type: row.type,
+    name: row.name,
+    size: row.size,
+    url: "",
+  }));
+
+  // Create signed URLs (works even if bucket is private)
+  const refreshed = await Promise.all(baseItems.map(refreshSignedUrlForItem));
+  items = refreshed.filter((it) => Boolean(it.url));
+
+  renderGallery();
+  updateEmptyState();
 }
 
 function updateEmptyState() {
@@ -263,7 +183,7 @@ function renderGallery() {
   });
 }
 
-function removeItem(id) {
+async function removeItem(id) {
   const index = items.findIndex((entry) => entry.id === id);
   if (index === -1) return;
 
@@ -273,153 +193,147 @@ function removeItem(id) {
   }
 
   items.splice(index, 1);
-  deleteItemFromDb(id);
   renderGallery();
   updateEmptyState();
-}
 
-// ----- Local account management (per-browser only) -----
+  if (!supabase || !currentUser) return;
 
-function loadAccountState() {
+  // Delete metadata row and storage object
   try {
-    const raw = localStorage.getItem("mg_accounts");
-    if (raw) {
-      accounts = JSON.parse(raw);
+    if (item.path) {
+      await supabase.storage.from(MEDIA_BUCKET).remove([item.path]);
     }
+    await supabase
+      .from("media_items")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", currentUser.id);
   } catch (e) {
-    accounts = {};
-  }
-
-  currentUserId = localStorage.getItem("mg_currentUserId") || "guest";
-  if (!accounts["guest"]) {
-    accounts["guest"] = { email: "Guest", password: null };
-  }
-
-  updateAccountUI();
-}
-
-function saveAccountState() {
-  try {
-    localStorage.setItem("mg_accounts", JSON.stringify(accounts));
-    if (currentUserId) {
-      localStorage.setItem("mg_currentUserId", currentUserId);
-    } else {
-      localStorage.removeItem("mg_currentUserId");
-    }
-  } catch (e) {
-    console.warn("Unable to persist account state", e);
+    console.error("Failed to delete item", e);
   }
 }
 
-function updateAccountUI() {
-  const account = accounts[currentUserId] || accounts["guest"];
-  accountNameEl.textContent = account?.email || "Guest";
+// ----- Supabase auth (multi-device accounts) -----
+function renderAccountStatus() {
+  // Keep the existing DOM structure; just update the text.
+  const name = currentUser?.email || "Guest";
+  accountNameEl.textContent = name;
+  accountStatusEl.innerHTML = `Signed in as <span id="account-name">${name}</span>`;
+}
 
-  if (currentUserId === "guest") {
-    accountStatusEl.textContent = "Browsing as ";
-    const span = document.createElement("span");
-    span.id = "account-name";
-    span.textContent = "Guest";
-    accountStatusEl.appendChild(span);
-  } else {
-    accountStatusEl.textContent = "Signed in as ";
-    const span = document.createElement("span");
-    span.id = "account-name";
-    span.textContent = account.email;
-    accountStatusEl.appendChild(span);
+async function initAuth() {
+  if (!supabase) {
+    console.warn("Supabase client not loaded.");
+    renderAccountStatus();
+    setUploadEnabled(false);
+    return;
   }
+
+  const { data } = await supabase.auth.getSession();
+  currentUser = data?.session?.user ?? null;
+  renderAccountStatus();
+  setUploadEnabled(Boolean(currentUser));
+  await loadItemsFromSupabase();
+
+  supabase.auth.onAuthStateChange(async (_event, session) => {
+    currentUser = session?.user ?? null;
+    renderAccountStatus();
+    setUploadEnabled(Boolean(currentUser));
+    await loadItemsFromSupabase();
+  });
 }
 
-function getAccountKey(email) {
-  return email.trim().toLowerCase();
-}
-
-btnSignup.addEventListener("click", () => {
+btnSignup.addEventListener("click", async () => {
+  if (!supabase) return alert("Supabase not loaded.");
   const email = accountEmailInput.value.trim();
   const password = accountPasswordInput.value;
+  if (!email || !password) return alert("Please enter both email and password.");
 
-  if (!email || !password) {
-    alert("Please enter both email and password.");
-    return;
-  }
+  const { error } = await supabase.auth.signUp({ email, password });
+  if (error) return alert(error.message);
 
-  const key = getAccountKey(email);
-  if (accounts[key]) {
-    alert("An account with this email already exists. Use Sign in instead.");
-    return;
-  }
+  accountPasswordInput.value = "";
+  alert("Account created. If email confirmation is enabled, check your email.");
+});
 
-  accounts[key] = { email, password };
-  currentUserId = key;
-  saveAccountState();
-  updateAccountUI();
+btnSignin.addEventListener("click", async () => {
+  if (!supabase) return alert("Supabase not loaded.");
+  const email = accountEmailInput.value.trim();
+  const password = accountPasswordInput.value;
+  if (!email || !password) return alert("Please enter both email and password.");
 
-  // When switching accounts, reload that account's items
-  items.forEach((item) => item.url && URL.revokeObjectURL(item.url));
-  items = [];
-  loadItemsFromDb();
-  updateEmptyState();
-
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) return alert(error.message);
   accountPasswordInput.value = "";
 });
 
-btnSignin.addEventListener("click", () => {
-  const email = accountEmailInput.value.trim();
-  const password = accountPasswordInput.value;
-
-  if (!email || !password) {
-    alert("Please enter both email and password.");
-    return;
-  }
-
-  const key = getAccountKey(email);
-  const account = accounts[key];
-  if (!account || account.password !== password) {
-    alert("Account not found or password is incorrect.");
-    return;
-  }
-
-  currentUserId = key;
-  saveAccountState();
-  updateAccountUI();
-
-  items.forEach((item) => item.url && URL.revokeObjectURL(item.url));
-  items = [];
-  loadItemsFromDb();
-  updateEmptyState();
-
-  accountPasswordInput.value = "";
-});
-
-btnSignout.addEventListener("click", () => {
-  currentUserId = "guest";
-  saveAccountState();
-  updateAccountUI();
-
-  items.forEach((item) => item.url && URL.revokeObjectURL(item.url));
-  items = [];
-  loadItemsFromDb();
-  updateEmptyState();
+btnSignout.addEventListener("click", async () => {
+  if (!supabase) return;
+  await supabase.auth.signOut();
 });
 
 fileInput.addEventListener("change", (event) => {
   const files = Array.from(event.target.files || []);
   if (!files.length) return;
 
-  const savePromises = files.map((file) => {
-    const type = file.type.startsWith("image") ? "image" : "video";
-    return saveItemToDb(file, type);
-  });
+  if (!supabase || !currentUser) {
+    alert("Please sign in first.");
+    fileInput.value = "";
+    return;
+  }
 
-  Promise.all(savePromises)
-    .then((savedItems) => {
-      items = items.concat(savedItems);
+  const uploadAll = async () => {
+    for (const file of files) {
+      const type = file.type.startsWith("image") ? "image" : "video";
+      const safeName = sanitizeFilename(file.name);
+      const path = `${currentUser.id}/${Date.now()}-${Math.random()
+        .toString(16)
+        .slice(2)}-${safeName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from(MEDIA_BUCKET)
+        .upload(path, file, { upsert: false });
+
+      if (uploadError) {
+        console.error(uploadError);
+        alert(`Upload failed: ${uploadError.message}`);
+        continue;
+      }
+
+      const { data: inserted, error: insertError } = await supabase
+        .from("media_items")
+        .insert({
+          user_id: currentUser.id,
+          path,
+          type,
+          name: file.name,
+          size: file.size,
+        })
+        .select("id")
+        .single();
+
+      if (insertError) {
+        console.error(insertError);
+        alert(`Database save failed: ${insertError.message}`);
+        continue;
+      }
+
+      const signed = await refreshSignedUrlForItem({
+        id: inserted?.id,
+        path,
+        type,
+        name: file.name,
+        size: file.size,
+        url: "",
+      });
+
+      items.unshift(signed);
       renderGallery();
       updateEmptyState();
-    })
-    .catch((err) => {
-      console.error("Error saving items", err);
-    });
+    }
+  };
+
+  uploadAll().catch((e) => console.error(e));
 
   fileInput.value = "";
 });
@@ -443,11 +357,30 @@ clearGalleryBtn.addEventListener("click", () => {
   const sure = window.confirm("Clear all items from this page?");
   if (!sure) return;
 
-  items.forEach((item) => URL.revokeObjectURL(item.url));
-  items = [];
-  clearDbForCurrentUser();
-  renderGallery();
-  updateEmptyState();
+  if (!supabase || !currentUser) return;
+
+  const doClear = async () => {
+    const paths = items.map((it) => it.path).filter(Boolean);
+    const ids = items.map((it) => it.id).filter(Boolean);
+
+    items.forEach((item) => item.url && URL.revokeObjectURL(item.url));
+    items = [];
+    renderGallery();
+    updateEmptyState();
+
+    if (paths.length) {
+      await supabase.storage.from(MEDIA_BUCKET).remove(paths);
+    }
+    if (ids.length) {
+      await supabase
+        .from("media_items")
+        .delete()
+        .in("id", ids)
+        .eq("user_id", currentUser.id);
+    }
+  };
+
+  doClear().catch((e) => console.error(e));
 });
 
 autoplayToggle.addEventListener("change", () => {
@@ -463,9 +396,10 @@ autoplayToggle.addEventListener("change", () => {
   });
 });
 
-// Load account + items on first visit
-loadAccountState();
-loadItemsFromDb();
+// Initialize auth + load from Supabase on first visit
+renderAccountStatus();
+setUploadEnabled(false);
+initAuth();
 
 // Be polite and clean up object URLs when leaving
 window.addEventListener("beforeunload", () => {
