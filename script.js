@@ -14,6 +14,7 @@ const accountPasswordInput = document.getElementById("account-password");
 const btnSignup = document.getElementById("btn-signup");
 const btnSignin = document.getElementById("btn-signin");
 const btnSignout = document.getElementById("btn-signout");
+const accountErrorEl = document.getElementById("account-error");
 
 // -------- Supabase (works across devices) --------
 // Your project ref was visible in your anon key: iuiioazmtynjouynpias
@@ -29,6 +30,18 @@ const supabaseClient =
 
 let items = [];
 let currentUser = null;
+
+function setAccountError(message) {
+  if (!accountErrorEl) return;
+  const msg = String(message || "").trim();
+  if (!msg) {
+    accountErrorEl.style.display = "none";
+    accountErrorEl.textContent = "";
+    return;
+  }
+  accountErrorEl.textContent = msg;
+  accountErrorEl.style.display = "block";
+}
 
 function setUploadEnabled(enabled) {
   fileInput.disabled = !enabled;
@@ -226,6 +239,7 @@ async function initAuth() {
     console.warn("Supabase client not loaded.");
     renderAccountStatus();
     setUploadEnabled(false);
+    setAccountError("Supabase not loaded. Please refresh the page.");
     return;
   }
 
@@ -233,12 +247,14 @@ async function initAuth() {
   currentUser = data?.session?.user ?? null;
   renderAccountStatus();
   setUploadEnabled(Boolean(currentUser));
+  setAccountError("");
   await loadItemsFromSupabase();
 
   supabaseClient.auth.onAuthStateChange(async (_event, session) => {
     currentUser = session?.user ?? null;
     renderAccountStatus();
     setUploadEnabled(Boolean(currentUser));
+    setAccountError("");
     await loadItemsFromSupabase();
   });
 }
@@ -250,10 +266,16 @@ btnSignup.addEventListener("click", async () => {
   if (!email || !password) return alert("Please enter both email and password.");
 
   const { error } = await supabaseClient.auth.signUp({ email, password });
-  if (error) return alert(error.message);
+  if (error) {
+    console.error("Signup error", error);
+    setAccountError(error.message || "Signup failed.");
+    return;
+  }
 
   accountPasswordInput.value = "";
-  alert("Account created. If email confirmation is enabled, check your email.");
+  setAccountError(
+    "Account created. If email confirmation is enabled, check your email."
+  );
 });
 
 btnSignin.addEventListener("click", async () => {
@@ -263,13 +285,19 @@ btnSignin.addEventListener("click", async () => {
   if (!email || !password) return alert("Please enter both email and password.");
 
   const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
-  if (error) return alert(error.message);
+  if (error) {
+    console.error("Signin error", error);
+    setAccountError(error.message || "Sign in failed.");
+    return;
+  }
   accountPasswordInput.value = "";
+  setAccountError("");
 });
 
 btnSignout.addEventListener("click", async () => {
   if (!supabaseClient) return;
   await supabaseClient.auth.signOut();
+  setAccountError("");
 });
 
 fileInput.addEventListener("change", (event) => {
