@@ -79,8 +79,12 @@ body {
 }
 
 .page-header {
-  padding: 24px 28px 8px;
+  padding: 18px 20px 8px;
   border-bottom: 1px solid rgba(139, 108, 72, 0.35);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
 }
 
 .title-block {
@@ -104,6 +108,108 @@ body {
   font-size: 14px;
   color: var(--ink-soft);
   letter-spacing: 0.03em;
+}
+
+.account-block {
+  max-width: 320px;
+  background: radial-gradient(circle at top, #fdf4e3, #e7cfaa);
+  border-radius: 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(124, 94, 60, 0.9);
+  box-shadow: 0 8px 18px rgba(90, 66, 40, 0.3);
+  position: relative;
+}
+
+.account-block::before {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  pointer-events: none;
+}
+
+.account-status {
+  font-size: 12px;
+  margin-bottom: 4px;
+  color: var(--ink-soft);
+}
+
+.account-status span {
+  font-weight: 600;
+}
+
+.account-form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.account-input {
+  width: 100%;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(129, 100, 65, 0.9);
+  font-family: "Crimson Text", serif;
+  font-size: 12px;
+  background: rgba(253, 245, 229, 0.95);
+  color: var(--ink-main);
+}
+
+.account-input:focus {
+  outline: none;
+  border-color: var(--accent-gold);
+  box-shadow: 0 0 0 1px rgba(201, 161, 74, 0.8);
+}
+
+.account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.account-btn {
+  border-radius: 999px;
+  border: 1px solid rgba(118, 90, 58, 0.9);
+  background: linear-gradient(to bottom, #fdf6e8, #e7d4b1);
+  color: var(--ink-main);
+  padding: 2px 8px;
+  font-family: "Crimson Text", serif;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background var(--transition-fast), transform var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.account-btn:hover {
+  transform: translateY(-0.5px);
+  background: linear-gradient(to bottom, #fff9ed, #ecd9b8);
+  box-shadow: 0 4px 10px rgba(101, 77, 49, 0.3);
+}
+
+.account-btn.subtle {
+  background: linear-gradient(to bottom, #f5ede0, #ddc7a3);
+}
+
+.account-hint {
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+@media (max-width: 720px) {
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .account-block {
+    width: 100%;
+  }
 }
 
 .page-main {

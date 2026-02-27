@@ -19,6 +19,40 @@
             A quiet corner for memories in ink and light.
           </p>
         </div>
+        <div class="account-block">
+          <div id="account-status" class="account-status">
+            Signed in as <span id="account-name">Guest</span>
+          </div>
+          <form id="account-form" class="account-form">
+            <input
+              id="account-email"
+              class="account-input"
+              type="email"
+              placeholder="Email (local only)"
+            />
+            <input
+              id="account-password"
+              class="account-input"
+              type="password"
+              placeholder="Password"
+            />
+            <div class="account-actions">
+              <button id="btn-signup" type="button" class="account-btn">
+                Create account
+              </button>
+              <button id="btn-signin" type="button" class="account-btn">
+                Sign in
+              </button>
+              <button id="btn-signout" type="button" class="account-btn subtle">
+                Sign out
+              </button>
+            </div>
+          </form>
+          <div class="account-hint">
+            Accounts and passwords are stored only in this browser, not on a
+            server.
+          </div>
+        </div>
       </header>
 
       <main class="page-main">

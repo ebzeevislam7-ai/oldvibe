@@ -6,6 +6,19 @@ const layoutListBtn = document.getElementById("layout-list");
 const clearGalleryBtn = document.getElementById("clear-gallery");
 const autoplayToggle = document.getElementById("autoplay-toggle");
 
+// Account UI
+const accountNameEl = document.getElementById("account-name");
+const accountStatusEl = document.getElementById("account-status");
+const accountEmailInput = document.getElementById("account-email");
+const accountPasswordInput = document.getElementById("account-password");
+const btnSignup = document.getElementById("btn-signup");
+const btnSignin = document.getElementById("btn-signin");
+const btnSignout = document.getElementById("btn-signout");
+
+// Local account state (per-browser only)
+let accounts = {};
+let currentUserId = null;
+
 // Simple IndexedDB setup so your pages (photos/videos) are remembered
 const DB_NAME = "medievalGallery";
 const DB_VERSION = 1;
@@ -65,6 +78,7 @@ function saveItemToDb(file, type) {
         size: file.size,
         createdAt: Date.now(),
         blob: file,
+        userId: currentUserId || "guest",
       };
 
       const req = store.add(record);
@@ -97,7 +111,12 @@ function loadItemsFromDb() {
       const req = store.getAll();
 
       req.onsuccess = () => {
-        const records = req.result || [];
+        const activeUserId = currentUserId || "guest";
+        const records = (req.result || []).filter((record) => {
+          const recordUser = record.userId || "guest";
+          return recordUser === activeUserId;
+        });
+
         const loadedItems = records.map((record) => {
           const url = URL.createObjectURL(record.blob);
           return {
@@ -132,12 +151,24 @@ function deleteItemFromDb(id) {
   });
 }
 
-function clearDb() {
+function clearDbForCurrentUser() {
   return openDb().then((db) => {
     if (!db) return;
     const tx = db.transaction(STORE_NAME, "readwrite");
     const store = tx.objectStore(STORE_NAME);
-    store.clear();
+    const activeUserId = currentUserId || "guest";
+
+    const req = store.openCursor();
+    req.onsuccess = (event) => {
+      const cursor = event.target.result;
+      if (cursor) {
+        const recordUser = cursor.value.userId || "guest";
+        if (recordUser === activeUserId) {
+          cursor.delete();
+        }
+        cursor.continue();
+      }
+    };
   });
 }
 
@@ -247,6 +278,130 @@ function removeItem(id) {
   updateEmptyState();
 }
 
+// ----- Local account management (per-browser only) -----
+
+function loadAccountState() {
+  try {
+    const raw = localStorage.getItem("mg_accounts");
+    if (raw) {
+      accounts = JSON.parse(raw);
+    }
+  } catch (e) {
+    accounts = {};
+  }
+
+  currentUserId = localStorage.getItem("mg_currentUserId") || "guest";
+  if (!accounts["guest"]) {
+    accounts["guest"] = { email: "Guest", password: null };
+  }
+
+  updateAccountUI();
+}
+
+function saveAccountState() {
+  try {
+    localStorage.setItem("mg_accounts", JSON.stringify(accounts));
+    if (currentUserId) {
+      localStorage.setItem("mg_currentUserId", currentUserId);
+    } else {
+      localStorage.removeItem("mg_currentUserId");
+    }
+  } catch (e) {
+    console.warn("Unable to persist account state", e);
+  }
+}
+
+function updateAccountUI() {
+  const account = accounts[currentUserId] || accounts["guest"];
+  accountNameEl.textContent = account?.email || "Guest";
+
+  if (currentUserId === "guest") {
+    accountStatusEl.textContent = "Browsing as ";
+    const span = document.createElement("span");
+    span.id = "account-name";
+    span.textContent = "Guest";
+    accountStatusEl.appendChild(span);
+  } else {
+    accountStatusEl.textContent = "Signed in as ";
+    const span = document.createElement("span");
+    span.id = "account-name";
+    span.textContent = account.email;
+    accountStatusEl.appendChild(span);
+  }
+}
+
+function getAccountKey(email) {
+  return email.trim().toLowerCase();
+}
+
+btnSignup.addEventListener("click", () => {
+  const email = accountEmailInput.value.trim();
+  const password = accountPasswordInput.value;
+
+  if (!email || !password) {
+    alert("Please enter both email and password.");
+    return;
+  }
+
+  const key = getAccountKey(email);
+  if (accounts[key]) {
+    alert("An account with this email already exists. Use Sign in instead.");
+    return;
+  }
+
+  accounts[key] = { email, password };
+  currentUserId = key;
+  saveAccountState();
+  updateAccountUI();
+
+  // When switching accounts, reload that account's items
+  items.forEach((item) => item.url && URL.revokeObjectURL(item.url));
+  items = [];
+  loadItemsFromDb();
+  updateEmptyState();
+
+  accountPasswordInput.value = "";
+});
+
+btnSignin.addEventListener("click", () => {
+  const email = accountEmailInput.value.trim();
+  const password = accountPasswordInput.value;
+
+  if (!email || !password) {
+    alert("Please enter both email and password.");
+    return;
+  }
+
+  const key = getAccountKey(email);
+  const account = accounts[key];
+  if (!account || account.password !== password) {
+    alert("Account not found or password is incorrect.");
+    return;
+  }
+
+  currentUserId = key;
+  saveAccountState();
+  updateAccountUI();
+
+  items.forEach((item) => item.url && URL.revokeObjectURL(item.url));
+  items = [];
+  loadItemsFromDb();
+  updateEmptyState();
+
+  accountPasswordInput.value = "";
+});
+
+btnSignout.addEventListener("click", () => {
+  currentUserId = "guest";
+  saveAccountState();
+  updateAccountUI();
+
+  items.forEach((item) => item.url && URL.revokeObjectURL(item.url));
+  items = [];
+  loadItemsFromDb();
+  updateEmptyState();
+});
+
 fileInput.addEventListener("change", (event) => {
   const files = Array.from(event.target.files || []);
   if (!files.length) return;
@@ -290,7 +445,7 @@ clearGalleryBtn.addEventListener("click", () => {
 
   items.forEach((item) => URL.revokeObjectURL(item.url));
   items = [];
-  clearDb();
+  clearDbForCurrentUser();
   renderGallery();
   updateEmptyState();
 });
@@ -308,7 +463,8 @@ autoplayToggle.addEventListener("change", () => {
   });
 });
 
-// Load any saved items on first visit
+// Load account + items on first visit
+loadAccountState();
 loadItemsFromDb();
 
 // Be polite and clean up object URLs when leaving
