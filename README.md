@@ -113,6 +113,56 @@ Then:
 
 This turns the gallery into a **multi‑device, real account** system. The existing code gives you a starting point for the UI and saving logic; you only need to swap out the local IndexedDB calls with Supabase calls following the above steps.
 
+## Simple file-based accounts with a `databases` folder (Node.js)
+
+If you prefer a very simple setup that writes to a folder called `databases` on a server you control, you can use the included **Node.js backend**.
+
+### 1. Install Node dependencies
+
+In PowerShell, from the project folder:
+
+```powershell
+cd "c:\Users\islam\Documents\MY Project"
+npm install
+```
+
+This uses `package.json` to install `express`, `cors`, and `bcryptjs`.
+
+### 2. File-based "database" layout
+
+- Folder: `databases/`
+  - File: `users.json` – stores users as JSON:
+
+```json
+[
+  {
+    "id": "random-id",
+    "email": "user@example.com",
+    "passwordHash": "...",
+    "tokens": ["session-token"],
+    "createdAt": "2026-02-26T00:00:00.000Z"
+  }
+]
+```
+
+You never edit this file by hand; the server updates it.
+
+### 3. Start the backend server
+
+```powershell
+cd "c:\Users\islam\Documents\MY Project"
+npm start
+```
+
+This runs `server.js` and exposes endpoints on `http://localhost:4000`:
+
+- `POST /api/signup` – body: `{ "email": "user@example.com", "password": "secret" }`
+  - Creates a new user, writes it into `databases/users.json`, and returns `{ id, email, token }`.
+- `POST /api/login` – same body, returns `{ id, email, token }` if correct.
+- `GET /api/check` – with header `Authorization: Bearer <token>`, returns `{ id, email }` if the token is valid.
+
+You can later deploy this Node server to a VPS or hosting provider; your static site (on GitHub Pages or elsewhere) would talk to it via `fetch` calls to these endpoints. That way, **accounts and passwords live in the server's `databases` folder**, not in the browser, and can be shared across devices and networks.
+
 
 ## Deploy with GitHub Pages
 
