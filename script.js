@@ -24,7 +24,7 @@ const SUPABASE_ANON_KEY =
 const MEDIA_BUCKET = "media";
 const SIGNED_URL_SECONDS = 60 * 60; // 1 hour
 
-const supabase =
+const supabaseClient =
   window.supabase?.createClient?.(SUPABASE_URL, SUPABASE_ANON_KEY) ?? null;
 
 let items = [];
@@ -43,8 +43,8 @@ function sanitizeFilename(name) {
 }
 
 async function refreshSignedUrlForItem(item) {
-  if (!supabase || !item?.path) return item;
-  const { data, error } = await supabase.storage
+  if (!supabaseClient || !item?.path) return item;
+  const { data, error } = await supabaseClient.storage
     .from(MEDIA_BUCKET)
     .createSignedUrl(item.path, SIGNED_URL_SECONDS);
   if (!error && data?.signedUrl) {
@@ -54,14 +54,14 @@ async function refreshSignedUrlForItem(item) {
 }
 
 async function loadItemsFromSupabase() {
-  if (!supabase || !currentUser) {
+  if (!supabaseClient || !currentUser) {
     items = [];
     renderGallery();
     updateEmptyState();
     return;
   }
 
-  const { data: rows, error } = await supabase
+  const { data: rows, error } = await supabaseClient
     .from("media_items")
     .select("id, path, type, name, size, created_at")
     .eq("user_id", currentUser.id)
@@ -196,14 +196,14 @@ async function removeItem(id) {
   renderGallery();
   updateEmptyState();
 
-  if (!supabase || !currentUser) return;
+  if (!supabaseClient || !currentUser) return;
 
   // Delete metadata row and storage object
   try {
     if (item.path) {
-      await supabase.storage.from(MEDIA_BUCKET).remove([item.path]);
+      await supabaseClient.storage.from(MEDIA_BUCKET).remove([item.path]);
     }
-    await supabase
+    await supabaseClient
       .from("media_items")
       .delete()
       .eq("id", id)
@@ -222,20 +222,20 @@ function renderAccountStatus() {
 }
 
 async function initAuth() {
-  if (!supabase) {
+  if (!supabaseClient) {
     console.warn("Supabase client not loaded.");
     renderAccountStatus();
     setUploadEnabled(false);
     return;
   }
 
-  const { data } = await supabase.auth.getSession();
+  const { data } = await supabaseClient.auth.getSession();
   currentUser = data?.session?.user ?? null;
   renderAccountStatus();
   setUploadEnabled(Boolean(currentUser));
   await loadItemsFromSupabase();
 
-  supabase.auth.onAuthStateChange(async (_event, session) => {
+  supabaseClient.auth.onAuthStateChange(async (_event, session) => {
     currentUser = session?.user ?? null;
     renderAccountStatus();
     setUploadEnabled(Boolean(currentUser));
@@ -244,12 +244,12 @@ async function initAuth() {
 }
 
 btnSignup.addEventListener("click", async () => {
-  if (!supabase) return alert("Supabase not loaded.");
+  if (!supabaseClient) return alert("Supabase not loaded.");
   const email = accountEmailInput.value.trim();
   const password = accountPasswordInput.value;
   if (!email || !password) return alert("Please enter both email and password.");
 
-  const { error } = await supabase.auth.signUp({ email, password });
+  const { error } = await supabaseClient.auth.signUp({ email, password });
   if (error) return alert(error.message);
 
   accountPasswordInput.value = "";
@@ -257,26 +257,26 @@ btnSignup.addEventListener("click", async () => {
 });
 
 btnSignin.addEventListener("click", async () => {
-  if (!supabase) return alert("Supabase not loaded.");
+  if (!supabaseClient) return alert("Supabase not loaded.");
   const email = accountEmailInput.value.trim();
   const password = accountPasswordInput.value;
   if (!email || !password) return alert("Please enter both email and password.");
 
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
   if (error) return alert(error.message);
   accountPasswordInput.value = "";
 });
 
 btnSignout.addEventListener("click", async () => {
-  if (!supabase) return;
-  await supabase.auth.signOut();
+  if (!supabaseClient) return;
+  await supabaseClient.auth.signOut();
 });
 
 fileInput.addEventListener("change", (event) => {
   const files = Array.from(event.target.files || []);
   if (!files.length) return;
 
-  if (!supabase || !currentUser) {
+  if (!supabaseClient || !currentUser) {
     alert("Please sign in first.");
     fileInput.value = "";
     return;
@@ -290,7 +290,7 @@ fileInput.addEventListener("change", (event) => {
         .toString(16)
         .slice(2)}-${safeName}`;
 
-      const { error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabaseClient.storage
         .from(MEDIA_BUCKET)
         .upload(path, file, { upsert: false });
 
@@ -300,7 +300,7 @@ fileInput.addEventListener("change", (event) => {
         continue;
       }
 
-      const { data: inserted, error: insertError } = await supabase
+      const { data: inserted, error: insertError } = await supabaseClient
         .from("media_items")
         .insert({
           user_id: currentUser.id,
@@ -357,7 +357,7 @@ clearGalleryBtn.addEventListener("click", () => {
   const sure = window.confirm("Clear all items from this page?");
   if (!sure) return;
 
-  if (!supabase || !currentUser) return;
+  if (!supabaseClient || !currentUser) return;
 
   const doClear = async () => {
     const paths = items.map((it) => it.path).filter(Boolean);
@@ -369,10 +369,10 @@ clearGalleryBtn.addEventListener("click", () => {
     updateEmptyState();
 
     if (paths.length) {
-      await supabase.storage.from(MEDIA_BUCKET).remove(paths);
+      await supabaseClient.storage.from(MEDIA_BUCKET).remove(paths);
     }
     if (ids.length) {
-      await supabase
+      await supabaseClient
         .from("media_items")
         .delete()
         .in("id", ids)
