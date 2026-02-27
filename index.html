@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My Medieval Gallery</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IM+Fell+English+SC&family=Crimson+Text:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="page">
+      <header class="page-header">
+        <div class="title-block">
+          <h1>My Illuminated Gallery</h1>
+          <p class="subtitle">
+            A quiet corner for memories in ink and light.
+          </p>
+        </div>
+      </header>
+
+      <main class="page-main">
+        <section class="upload-panel">
+          <h2 class="section-title">Add New Relics</h2>
+          <p class="section-description">
+            Choose your treasured images or moving tapestries (videos) to place
+            upon these pages.
+          </p>
+
+          <div class="upload-controls">
+            <label class="file-label">
+              <span class="file-label-main">Select images or videos</span>
+              <span class="file-label-sub">JPG, PNG, GIF, MP4, WEBM</span>
+              <input
+                id="file-input"
+                type="file"
+                accept="image/*,video/*"
+                multiple
+              />
+            </label>
+
+            <div class="toggle-row">
+              <label class="toggle">
+                <input id="autoplay-toggle" type="checkbox" checked />
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">Autoplay videos</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="hint">
+            Items stay only in this browser on this device; nothing is uploaded
+            to a server.
+          </div>
+        </section>
+
+        <section class="gallery-panel">
+          <div class="gallery-header">
+            <h2 class="section-title">Collected Works</h2>
+            <div class="gallery-controls">
+              <button id="layout-grid" class="gallery-btn gallery-btn-active">
+                Grid
+              </button>
+              <button id="layout-list" class="gallery-btn">List</button>
+              <button id="clear-gallery" class="gallery-btn danger">
+                Clear All
+              </button>
+            </div>
+          </div>
+
+          <div id="empty-state" class="empty-state">
+            <div class="empty-crest">✶</div>
+            <p class="empty-title">Your pages wait quietly.</p>
+            <p class="empty-text">
+              Add the first image or video to begin this illuminated chronicle.
+            </p>
+          </div>
+
+          <div id="gallery" class="gallery gallery-grid"></div>
+        </section>
+      </main>
+
+      <footer class="page-footer">
+        <span>Crafted in the spirit of old books.</span>
+      </footer>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
